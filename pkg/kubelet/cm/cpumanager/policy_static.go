@@ -333,6 +333,8 @@ func (p *staticPolicy) RemoveContainer(s state.State, podUID string, containerNa
 		s.Delete(podUID, containerName)
 		// Mutate the shared pool, adding released cpus.
 		toRelease = toRelease.Difference(cpusInUse)
+		// Release CPU sibling cores
+		// -------
 		tmp := cpuset.NewBuilder()
         	for i := 0; i < 64; i++ {
                 	if toRelease.Contains(i) {
@@ -340,6 +342,7 @@ func (p *staticPolicy) RemoveContainer(s state.State, podUID string, containerNa
                         	tmp.Add(i+64)
                 	}
         	}
+		// -------
 		s.SetDefaultCPUSet(s.GetDefaultCPUSet().Union(tmp.Result()))
 	}
 	return nil
@@ -375,6 +378,8 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bit
 	}
 	result = result.Union(remainingCPUs)
 
+	// Add CPU siblings to allocation so that performance is not decreased
+	// -----
 	tmp := cpuset.NewBuilder() 
 
 	for i := 0; i < 64; i++ {
@@ -383,6 +388,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bit
 		   	tmp.Add(i+64)
 		}
 	}
+        // -----
 
 	// Remove allocated CPUs from the shared CPUSet.
 	s.SetDefaultCPUSet(s.GetDefaultCPUSet().Difference(tmp.Result()))
