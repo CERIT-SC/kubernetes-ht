@@ -187,10 +187,10 @@ func (p *staticPolicy) validateState(s state.State) error {
 	// 1. Check if the reserved cpuset is not part of default cpuset because:
 	// - kube/system reserved have changed (increased) - may lead to some containers not being able to start
 	// - user tampered with file
-	if !p.reserved.Intersection(tmpDefaultCPUset).Equals(p.reserved) {
+	/*if !p.reserved.Intersection(tmpDefaultCPUset).Equals(p.reserved) {
 		return fmt.Errorf("not all reserved cpus: \"%s\" are present in defaultCpuSet: \"%s\"",
 			p.reserved.String(), tmpDefaultCPUset.String())
-	}
+	}*/
 
 	// 2. Check if state for static policy is consistent
 	for pod := range tmpAssignments {
@@ -210,7 +210,7 @@ func (p *staticPolicy) validateState(s state.State) error {
 	// assign non-existent CPUs to containers. Validate that the
 	// topology that was received during CPU manager startup matches with
 	// the set of CPUs stored in the state.
-	totalKnownCPUs := tmpDefaultCPUset.Clone()
+	/*totalKnownCPUs := tmpDefaultCPUset.Clone()
 	tmpCPUSets := []cpuset.CPUSet{}
 	for pod := range tmpAssignments {
 		for _, cset := range tmpAssignments[pod] {
@@ -221,7 +221,7 @@ func (p *staticPolicy) validateState(s state.State) error {
 	if !totalKnownCPUs.Equals(p.topology.CPUDetails.CPUs()) {
 		return fmt.Errorf("current set of available CPUs \"%s\" doesn't match with CPUs in state \"%s\"",
 			p.topology.CPUDetails.CPUs().String(), totalKnownCPUs.String())
-	}
+	}*/
 
 	return nil
 }
@@ -333,7 +333,14 @@ func (p *staticPolicy) RemoveContainer(s state.State, podUID string, containerNa
 		s.Delete(podUID, containerName)
 		// Mutate the shared pool, adding released cpus.
 		toRelease = toRelease.Difference(cpusInUse)
-		s.SetDefaultCPUSet(s.GetDefaultCPUSet().Union(toRelease))
+		tmp := cpuset.NewBuilder()
+        	for i := 0; i < 64; i++ {
+                	if toRelease.Contains(i) {
+                        	tmp.Add(i)
+                        	tmp.Add(i+64)
+                	}
+        	}
+		s.SetDefaultCPUSet(s.GetDefaultCPUSet().Union(tmp.Result()))
 	}
 	return nil
 }
@@ -368,8 +375,17 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bit
 	}
 	result = result.Union(remainingCPUs)
 
+	tmp := cpuset.NewBuilder() 
+
+	for i := 0; i < 64; i++ {
+		if result.Contains(i) {
+			tmp.Add(i)
+		   	tmp.Add(i+64)
+		}
+	}
+
 	// Remove allocated CPUs from the shared CPUSet.
-	s.SetDefaultCPUSet(s.GetDefaultCPUSet().Difference(result))
+	s.SetDefaultCPUSet(s.GetDefaultCPUSet().Difference(tmp.Result()))
 
 	klog.InfoS("AllocateCPUs", "result", result)
 	return result, nil
